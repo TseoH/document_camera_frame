@@ -7,6 +7,7 @@ import '../controllers/document_camera_controller.dart';
 import '../core/app_constants.dart';
 import '../core/enums.dart';
 import '../models/document_capture_data.dart';
+import '../models/document_detection_config.dart';
 import '../services/document_detection_service.dart';
 import '../services/ocr_service.dart';
 import '../services/pdf_generation_service.dart';
@@ -27,6 +28,7 @@ class DocumentCameraLogic {
   final int imageQuality;
   final FlashMode initialFlashMode;
   final DocumentCameraUIMode uiMode;
+  final DocumentDetectionConfig detectionConfig;
 
   DocumentCameraLogic({
     required this.context,
@@ -44,6 +46,7 @@ class DocumentCameraLogic {
     this.imageQuality = 90,
     this.initialFlashMode = FlashMode.auto,
     required this.uiMode,
+    this.detectionConfig = const DocumentDetectionConfig(),
   });
 
   Timer? _debounceTimer;
@@ -99,6 +102,7 @@ class DocumentCameraLogic {
     if (enableAutoCapture) {
       documentDetectionService = DocumentDetectionService(
         onError: (e) => onCameraError?.call(),
+        config: detectionConfig,
       );
       documentDetectionService!.initialize();
     }

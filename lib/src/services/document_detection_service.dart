@@ -2,6 +2,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart';
 
+import '../models/document_detection_config.dart';
 import 'image_converter_service.dart';
 
 /// Service responsible for detecting documents in a live camera stream.
@@ -22,7 +23,13 @@ class DocumentDetectionService {
   /// Useful for surfacing errors to the UI or logging layer without throwing.
   final void Function(Object error)? onError;
 
-  DocumentDetectionService({this.onError});
+  /// Detection thresholds used during alignment evaluation.
+  final DocumentDetectionConfig config;
+
+  DocumentDetectionService({
+    this.onError,
+    this.config = const DocumentDetectionConfig(),
+  });
 
   late final ObjectDetector _objectDetector;
   bool _isDetectorInitialized = false;
@@ -187,17 +194,11 @@ class DocumentDetectionService {
           ((frameTopOnPreview / fittedPreviewHeight) * analysisHeight).round();
 
       // ---------------------------------------------------------------------------
-      // STEP 5: Alignment thresholds
+      // STEP 5: Alignment thresholds (from config)
       // ---------------------------------------------------------------------------
-      // Size thresholds: document should fill between 50% and 70% of the frame area.
-      //   - Lower bound (50%): allows partial or smaller documents.
-      //   - Upper bound (70%): rejects detections that overflow the frame.
-      const double minSizeRatio = 0.50;
-      const double maxSizeRatio = 0.70;
-
-      // Position tolerance: 0% means strictly within the frame bounds.
-      // Increase slightly (e.g., 0.05) to allow minor overrun.
-      const double frameTolerance = 0.0;
+      final double minSizeRatio = config.minSizeRatio;
+      final double maxSizeRatio = config.maxSizeRatio;
+      final double frameTolerance = config.frameTolerance;
 
       final double relaxedFrameTop = cropY * (1 - frameTolerance);
       final double relaxedFrameBottom =

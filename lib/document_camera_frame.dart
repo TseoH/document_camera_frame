@@ -11,6 +11,7 @@ export 'src/services/pdf_generation_service.dart';
 
 // Models
 export 'src/models/document_capture_data.dart';
+export 'src/models/document_detection_config.dart';
 
 // Main widget
 export 'src/ui/page/document_camera_frame.dart';
