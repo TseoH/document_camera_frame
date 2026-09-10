@@ -77,6 +77,9 @@ class DocumentCameraLogic {
   bool isDetectorBusy = false;
   bool isImageStreamActive = false;
 
+  DateTime? _lastFrameProcessedAt;
+  DateTime? _lastStatusPublishedAt;
+
   double updatedFrameWidth = 0;
   double updatedFrameHeight = 0;
   double maxFrameHeight = 0;
@@ -182,10 +185,23 @@ class DocumentCameraLogic {
       return;
     }
 
+    final DateTime now = DateTime.now();
+    final Duration frameProcessingInterval =
+        detectionConfig.frameProcessingInterval;
+    if (frameProcessingInterval > Duration.zero &&
+        _lastFrameProcessedAt != null &&
+        now.difference(_lastFrameProcessedAt!) < frameProcessingInterval) {
+      return;
+    }
+
     isDetectorBusy = true;
+    _lastFrameProcessedAt = now;
 
     try {
-      final bool isAligned = await documentDetectionService!.processImage(
+      DocumentDetectionStatus? rawStatus;
+      String? rawMessage;
+
+      await documentDetectionService!.processImage(
         image: image,
         cameraController: controller.cameraController!,
         context: context,
@@ -194,13 +210,14 @@ class DocumentCameraLogic {
         screenWidth: MediaQuery.of(context).size.width.toInt(),
         screenHeight: MediaQuery.of(context).size.height.toInt(),
         onStatusUpdated: (status) {
-          detectionStatusNotifier.value = status;
+          rawMessage = status;
         },
         onStatusNotified: (status) {
-          detectionStatusEnumNotifier.value = status;
+          rawStatus = status;
         },
       );
 
+      final bool isAligned = _publishDetectionStatus(rawStatus, rawMessage);
       isDocumentAlignedNotifier.value = isAligned;
 
       if (isAligned) {
@@ -232,6 +249,76 @@ class DocumentCameraLogic {
     } finally {
       isDetectorBusy = false;
     }
+  }
+
+  /// Confirms a raw per-frame detection [status]/[message] pair before
+  /// publishing it to [detectionStatusEnumNotifier] / [detectionStatusNotifier],
+  /// and returns whether the document is currently aligned.
+  ///
+  /// Once a non-aligned status is displayed, it is held for at least
+  /// [DocumentDetectionConfig.statusHoldDuration] before a *different*
+  /// non-aligned status is allowed to replace it — a minimum dwell time,
+  /// not a "wait until the new value stops changing" debounce. The latter
+  /// would let a noisy raw signal (e.g. flickering between "no document"
+  /// and a spurious detection) get stuck displaying a stale status
+  /// indefinitely, since the new value would never hold still long enough
+  /// to be confirmed. A fixed dwell time instead guarantees the display
+  /// catches up to the latest raw value within a bounded delay.
+  ///
+  /// Any transition into or out of [DocumentDetectionStatus.aligned] is
+  /// always published immediately — this is the single signal the
+  /// auto-capture debounce above relies on, so holding it back would delay
+  /// or destabilize capture.
+  bool _publishDetectionStatus(
+    DocumentDetectionStatus? status,
+    String? message,
+  ) {
+    if (status == null) {
+      // Detector wasn't initialized, image conversion failed, or an
+      // exception was thrown — no status was produced for this frame.
+      return false;
+    }
+
+    final DocumentDetectionStatus? confirmed =
+        detectionStatusEnumNotifier.value;
+
+    if (status == confirmed) {
+      // Same classification — refresh the message text (it can vary within
+      // a status, e.g. combined directional hints) without resetting the
+      // dwell timer.
+      detectionStatusNotifier.value = message;
+      return status == DocumentDetectionStatus.aligned;
+    }
+
+    final bool isAlignmentTransition =
+        confirmed == null ||
+        status == DocumentDetectionStatus.aligned ||
+        confirmed == DocumentDetectionStatus.aligned;
+
+    if (isAlignmentTransition) {
+      _publishStatus(status, message);
+      return status == DocumentDetectionStatus.aligned;
+    }
+
+    final Duration holdDuration = detectionConfig.statusHoldDuration;
+    final bool holdElapsed =
+        holdDuration <= Duration.zero ||
+        _lastStatusPublishedAt == null ||
+        DateTime.now().difference(_lastStatusPublishedAt!) >= holdDuration;
+
+    if (holdElapsed) {
+      _publishStatus(status, message);
+    }
+    // else: keep showing the previously confirmed status/message; the next
+    // processed frame re-checks once the dwell time has elapsed.
+
+    return false; // `confirmed` wasn't `aligned` on this branch.
+  }
+
+  void _publishStatus(DocumentDetectionStatus status, String? message) {
+    detectionStatusEnumNotifier.value = status;
+    detectionStatusNotifier.value = message;
+    _lastStatusPublishedAt = DateTime.now();
   }
 
   Future<void> captureAndHandleImageUnified(
