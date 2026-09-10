@@ -20,10 +20,34 @@ final class DocumentDetectionConfig {
   /// Defaults to `0.0`.
   final double frameTolerance;
 
+  /// Minimum time that must elapse between two processed camera frames.
+  ///
+  /// The camera stream can deliver frames much faster than the on-screen
+  /// guidance needs to update (e.g. 30-60 fps). Frames arriving before this
+  /// interval has elapsed since the last processed one are skipped, which
+  /// reduces both detector CPU usage and how often the guidance status can
+  /// change. Set to [Duration.zero] to process every frame (the pre-existing
+  /// behavior). Defaults to `200ms`.
+  final Duration frameProcessingInterval;
+
+  /// Minimum time a new, non-aligned guidance status must remain stable
+  /// before it replaces the currently displayed one.
+  ///
+  /// This smooths out rapid back-and-forth changes between guidance
+  /// messages (e.g. "Move closer" / "Move left") so consuming apps that bind
+  /// UI directly to the status notifiers don't see it flicker multiple times
+  /// per second. It does not delay the transition into or out of
+  /// [DocumentDetectionStatus.aligned] — that transition (and therefore the
+  /// auto-capture debounce) always applies immediately, so capture reliability
+  /// and promptness are unaffected. Defaults to `450ms`.
+  final Duration statusHoldDuration;
+
   const DocumentDetectionConfig({
     this.minSizeRatio = 0.50,
     this.maxSizeRatio = 0.70,
     this.frameTolerance = 0.0,
+    this.frameProcessingInterval = const Duration(milliseconds: 200),
+    this.statusHoldDuration = const Duration(milliseconds: 450),
   }) : assert(minSizeRatio >= 0.0 && minSizeRatio <= 1.0),
        assert(maxSizeRatio > 0.0 && maxSizeRatio <= 1.0),
        assert(minSizeRatio < maxSizeRatio),
