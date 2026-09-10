@@ -77,6 +77,10 @@ class DocumentCameraLogic {
   bool isDetectorBusy = false;
   bool isImageStreamActive = false;
 
+  DateTime? _lastFrameProcessedAt;
+  DocumentDetectionStatus? _pendingStatus;
+  DateTime? _pendingStatusSince;
+
   double updatedFrameWidth = 0;
   double updatedFrameHeight = 0;
   double maxFrameHeight = 0;
@@ -182,10 +186,23 @@ class DocumentCameraLogic {
       return;
     }
 
+    final DateTime now = DateTime.now();
+    final Duration frameProcessingInterval =
+        detectionConfig.frameProcessingInterval;
+    if (frameProcessingInterval > Duration.zero &&
+        _lastFrameProcessedAt != null &&
+        now.difference(_lastFrameProcessedAt!) < frameProcessingInterval) {
+      return;
+    }
+
     isDetectorBusy = true;
+    _lastFrameProcessedAt = now;
 
     try {
-      final bool isAligned = await documentDetectionService!.processImage(
+      DocumentDetectionStatus? rawStatus;
+      String? rawMessage;
+
+      await documentDetectionService!.processImage(
         image: image,
         cameraController: controller.cameraController!,
         context: context,
@@ -194,13 +211,14 @@ class DocumentCameraLogic {
         screenWidth: MediaQuery.of(context).size.width.toInt(),
         screenHeight: MediaQuery.of(context).size.height.toInt(),
         onStatusUpdated: (status) {
-          detectionStatusNotifier.value = status;
+          rawMessage = status;
         },
         onStatusNotified: (status) {
-          detectionStatusEnumNotifier.value = status;
+          rawStatus = status;
         },
       );
 
+      final bool isAligned = _publishDetectionStatus(rawStatus, rawMessage);
       isDocumentAlignedNotifier.value = isAligned;
 
       if (isAligned) {
@@ -232,6 +250,68 @@ class DocumentCameraLogic {
     } finally {
       isDetectorBusy = false;
     }
+  }
+
+  /// Confirms a raw per-frame detection [status]/[message] pair before
+  /// publishing it to [detectionStatusEnumNotifier] / [detectionStatusNotifier],
+  /// and returns whether the document is currently aligned.
+  ///
+  /// Rapid back-and-forth between non-aligned guidance messages (e.g.
+  /// "Move closer" / "Move left") is held for [DocumentDetectionConfig.statusHoldDuration]
+  /// before it replaces the currently displayed status, so consuming apps
+  /// bound directly to these notifiers don't see the text flicker.
+  ///
+  /// Any transition into or out of [DocumentDetectionStatus.aligned] is
+  /// always published immediately — this is the single signal the
+  /// auto-capture debounce above relies on, so holding it back would delay
+  /// or destabilize capture.
+  bool _publishDetectionStatus(
+    DocumentDetectionStatus? status,
+    String? message,
+  ) {
+    if (status == null) {
+      // Detector wasn't initialized, image conversion failed, or an
+      // exception was thrown — no status was produced for this frame.
+      return false;
+    }
+
+    final DocumentDetectionStatus? confirmed =
+        detectionStatusEnumNotifier.value;
+
+    if (status == confirmed) {
+      _pendingStatus = null;
+      _pendingStatusSince = null;
+      detectionStatusNotifier.value = message;
+      return status == DocumentDetectionStatus.aligned;
+    }
+
+    final bool publishImmediately =
+        confirmed == null ||
+        status == DocumentDetectionStatus.aligned ||
+        confirmed == DocumentDetectionStatus.aligned;
+
+    if (!publishImmediately) {
+      final Duration holdDuration = detectionConfig.statusHoldDuration;
+
+      if (status != _pendingStatus) {
+        _pendingStatus = status;
+        _pendingStatusSince = DateTime.now();
+      }
+
+      final bool stable =
+          holdDuration <= Duration.zero ||
+          DateTime.now().difference(_pendingStatusSince!) >= holdDuration;
+
+      if (!stable) {
+        return false; // Still not aligned while a candidate status stabilizes.
+      }
+    }
+
+    _pendingStatus = null;
+    _pendingStatusSince = null;
+    detectionStatusEnumNotifier.value = status;
+    detectionStatusNotifier.value = message;
+    return status == DocumentDetectionStatus.aligned;
   }
 
   Future<void> captureAndHandleImageUnified(
