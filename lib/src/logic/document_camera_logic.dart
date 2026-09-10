@@ -78,8 +78,7 @@ class DocumentCameraLogic {
   bool isImageStreamActive = false;
 
   DateTime? _lastFrameProcessedAt;
-  DocumentDetectionStatus? _pendingStatus;
-  DateTime? _pendingStatusSince;
+  DateTime? _lastStatusPublishedAt;
 
   double updatedFrameWidth = 0;
   double updatedFrameHeight = 0;
@@ -256,10 +255,15 @@ class DocumentCameraLogic {
   /// publishing it to [detectionStatusEnumNotifier] / [detectionStatusNotifier],
   /// and returns whether the document is currently aligned.
   ///
-  /// Rapid back-and-forth between non-aligned guidance messages (e.g.
-  /// "Move closer" / "Move left") is held for [DocumentDetectionConfig.statusHoldDuration]
-  /// before it replaces the currently displayed status, so consuming apps
-  /// bound directly to these notifiers don't see the text flicker.
+  /// Once a non-aligned status is displayed, it is held for at least
+  /// [DocumentDetectionConfig.statusHoldDuration] before a *different*
+  /// non-aligned status is allowed to replace it — a minimum dwell time,
+  /// not a "wait until the new value stops changing" debounce. The latter
+  /// would let a noisy raw signal (e.g. flickering between "no document"
+  /// and a spurious detection) get stuck displaying a stale status
+  /// indefinitely, since the new value would never hold still long enough
+  /// to be confirmed. A fixed dwell time instead guarantees the display
+  /// catches up to the latest raw value within a bounded delay.
   ///
   /// Any transition into or out of [DocumentDetectionStatus.aligned] is
   /// always published immediately — this is the single signal the
@@ -279,39 +283,42 @@ class DocumentCameraLogic {
         detectionStatusEnumNotifier.value;
 
     if (status == confirmed) {
-      _pendingStatus = null;
-      _pendingStatusSince = null;
+      // Same classification — refresh the message text (it can vary within
+      // a status, e.g. combined directional hints) without resetting the
+      // dwell timer.
       detectionStatusNotifier.value = message;
       return status == DocumentDetectionStatus.aligned;
     }
 
-    final bool publishImmediately =
+    final bool isAlignmentTransition =
         confirmed == null ||
         status == DocumentDetectionStatus.aligned ||
         confirmed == DocumentDetectionStatus.aligned;
 
-    if (!publishImmediately) {
-      final Duration holdDuration = detectionConfig.statusHoldDuration;
-
-      if (status != _pendingStatus) {
-        _pendingStatus = status;
-        _pendingStatusSince = DateTime.now();
-      }
-
-      final bool stable =
-          holdDuration <= Duration.zero ||
-          DateTime.now().difference(_pendingStatusSince!) >= holdDuration;
-
-      if (!stable) {
-        return false; // Still not aligned while a candidate status stabilizes.
-      }
+    if (isAlignmentTransition) {
+      _publishStatus(status, message);
+      return status == DocumentDetectionStatus.aligned;
     }
 
-    _pendingStatus = null;
-    _pendingStatusSince = null;
+    final Duration holdDuration = detectionConfig.statusHoldDuration;
+    final bool holdElapsed =
+        holdDuration <= Duration.zero ||
+        _lastStatusPublishedAt == null ||
+        DateTime.now().difference(_lastStatusPublishedAt!) >= holdDuration;
+
+    if (holdElapsed) {
+      _publishStatus(status, message);
+    }
+    // else: keep showing the previously confirmed status/message; the next
+    // processed frame re-checks once the dwell time has elapsed.
+
+    return false; // `confirmed` wasn't `aligned` on this branch.
+  }
+
+  void _publishStatus(DocumentDetectionStatus status, String? message) {
     detectionStatusEnumNotifier.value = status;
     detectionStatusNotifier.value = message;
-    return status == DocumentDetectionStatus.aligned;
+    _lastStatusPublishedAt = DateTime.now();
   }
 
   Future<void> captureAndHandleImageUnified(
