@@ -4,17 +4,17 @@ PODS:
   - document_camera_frame (2.5.4):
     - Flutter
   - Flutter (1.0.0)
-  - google_mlkit_commons (0.11.1):
+  - google_mlkit_commons (0.12.0):
     - Flutter
     - MLKitVision (~> 10.0.0)
-  - google_mlkit_document_scanner (0.4.1):
+  - google_mlkit_document_scanner (0.5.0):
     - Flutter
-  - google_mlkit_object_detection (0.15.1):
+  - google_mlkit_object_detection (0.16.0):
     - Flutter
     - google_mlkit_commons
     - GoogleMLKit/ObjectDetection (~> 9.0.0)
     - GoogleMLKit/ObjectDetectionCustom (~> 9.0.0)
-  - google_mlkit_text_recognition (0.15.1):
+  - google_mlkit_text_recognition (0.16.0):
     - Flutter
     - google_mlkit_commons
     - GoogleMLKit/TextRecognition (~> 9.0.0)
@@ -154,12 +154,12 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   camera_avfoundation: 968a9a5323c79a99c166ad9d7866bfd2047b5a9b
-  document_camera_frame: 65ce3838a110327ee940478b6ebd1f0a732496be
+  document_camera_frame: 3ec8e8d5176317614187d067f2c19b89c8b82a46
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
-  google_mlkit_commons: a5e4ffae5bc59ea4c7b9025dc72cb6cb79dc1166
-  google_mlkit_document_scanner: 107c2c91ea967acb9eb989ff988443b81b8e761a
-  google_mlkit_object_detection: 6a81b32faf7a9b700bed7a2caa67254818553257
-  google_mlkit_text_recognition: b3de5adb786ad7a0fe8e13618387b8d2df0f3c70
+  google_mlkit_commons: b4dfe2f6ae4cbf24010dc6640a28984d01343c86
+  google_mlkit_document_scanner: baffd57d91ee74fd3a3679333fa654e79f8dc71f
+  google_mlkit_object_detection: 9758969345a4daf5da1f77509b9874dda866efb3
+  google_mlkit_text_recognition: 9b164471713e3afdb4c129cabe6d1d64fef7e817
   GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
   GoogleMLKit: b1eee21a41c57704fe72483b15c85cb2c0cd7444
   GoogleToolboxForMac: d1a2cbf009c453f4d6ded37c105e2f67a32206d8
@@ -180,6 +180,6 @@ SPEC CHECKSUMS:
   path_provider_foundation: bb55f6dbba17d0dccd6737fe6f7f34fbd0376880
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
 
-PODFILE CHECKSUM: fba9018169efa3a5fd3b035ceab7df54bcff94bc
+PODFILE CHECKSUM: e66793d4fab911ee1d51a9d065f36ed009c047fb
 
 COCOAPODS: 1.16.2
